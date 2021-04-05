@@ -4,6 +4,7 @@
 #include "bakkesmod/wrappers/GameObject/BallWrapper.h"
 #include "utils/parser.h"
 #include <string>
+#include <queue>
 
 
 BAKKESMOD_PLUGIN(koth, "King of the hill plugin", plugin_version, 0);
@@ -70,8 +71,9 @@ void koth::resetPlayers() {
 	for (int i = 0; i < koth_max_players; i++)
 	{
 		koth_players[i] = -1;
-		koth_queue[i] = -1;
 		koth_player_names[i] = "";
+		if(players_Q.size() > 0)
+			players_Q.pop();
 	}
 	koth_playing[0] = -1;
 	koth_playing[1] = -1;
@@ -137,40 +139,13 @@ void koth::randomizeAllPlayers() {
 	randomizePlayers();
 }
 
-void koth::MoveQueueBack()
-{
-	cvarManager->log("MoveQueueBack() Moving QUEUE one back.");
-	for (int y = 0; y < koth_max_players; y++)
-	{
-		if (y == koth_max_players - 1)
-		{
-			if(koth_queue[y] != -1)
-				cvarManager->log("MoveQueueBack() Removing player" + koth_player_names[koth_queue[y]] + " from pos " + std::to_string(koth_max_players - 1) + " in the queue.");
-			koth_queue[y] = -1;
-		}
-		else {
-			if (koth_queue[y+1] != -1)
-				cvarManager->log("MoveQueueBack() Moving " + koth_player_names[koth_queue[y+1]] + " from pos " + std::to_string(y + 2) + " to " + std::to_string(y + 1));
-			koth_queue[y] = koth_queue[y + 1];
-		}
-	}
-	cvarManager->log("MoveQueueBack() QUEUE moved.");
-}
-
 void koth::insertInQueue(int num) {
 	cvarManager->log("insertInQueue() Inserting player " + koth_player_names[num] + " to queue.");
-	if (koth_queue[koth_max_players - 1] >= 0) {
+	if (players_Q.size() >= koth_max_players-1) {
 		cvarManager->log("insertInQueue() Couldn't add " + koth_player_names[num] + " to the queue. Queue is full.");
 	}
 	else {
-		for (int i = 0; i < koth_max_players; i++) {
-			if (koth_queue[i] == -1)
-			{
-				koth_queue[i] = num;
-				cvarManager->log("insertInQueue() Adding " + koth_player_names[num] + " to the end of the queue at position " + std::to_string(i + 1));
-				break;
-			}
-		}
+		players_Q.push(num);
 	}
 }
 
@@ -246,19 +221,14 @@ void koth::startGame() {
 	cvarManager->log("startGame() Starting King of the hill with these players:");
 	cvarManager->log("startGame() " + Teams[0] + " team: " + koth_player_names[0]);
 	cvarManager->log("startGame() " + Teams[1] + " team: " + koth_player_names[1]);
-	cvarManager->log("startGame() QUEUE:");
-	for (int i = 0; i < koth_max_players; i++)
-	{
-		if(koth_queue[i] >= 0)
-			cvarManager->log("startGame() " + std::to_string(i + 1) + ": " + koth_player_names[koth_queue[i]]);
-	}
+	cvarManager->log("startGame() Next in queue: " + koth_player_names[players_Q.front()]);
 	cvarManager->log("startGame() _______________________________________________________");
 }
 
 void koth::statTickerEvent(ServerWrapper caller, void* args) {
 	if (!*enabled)
 		return;
-	if (koth_queue[0] == -1) {
+	if (players_Q.size() == 0) {
 		cvarManager->log("statTickerEvent() Queue NULL!");
 		return;
 	}
@@ -303,23 +273,18 @@ void koth::statTickerEvent(ServerWrapper caller, void* args) {
 			}
 		}
 		else if (team != win_team) {
-			if (player.GetPlayerID() == koth_players[koth_queue[0]]) {
-				koth_playing[change_team] = koth_queue[0];
-				cvarManager->log("statTickerEvent() Adding " + koth_player_names[koth_queue[0]] + " to team " + std::to_string(change_team));
+			if (player.GetPlayerID() == koth_players[players_Q.front()]) {
+				koth_playing[change_team] = players_Q.front();
+				cvarManager->log("statTickerEvent() Adding " + koth_player_names[players_Q.front()] + " to team " + std::to_string(change_team));
+				players_Q.pop();
 			}
 		}
 	}
-	MoveQueueBack();
 	cvarManager->log("statTickerEvent() _______________________________________________________");
 	cvarManager->log("statTickerEvent() Players playing:");
 	cvarManager->log("statTickerEvent() " + Teams[0] + " team: " + koth_player_names[koth_playing[0]]);
 	cvarManager->log("statTickerEvent() " + Teams[1] + " team: " + koth_player_names[koth_playing[1]]);
-	cvarManager->log("statTickerEvent() QUEUE:");
-	for (int i = 0; i < koth_max_players; i++)
-	{
-		if (koth_queue[i] != -1)
-			cvarManager->log("statTickerEvent() " + std::to_string(i + 1) + ": " + koth_player_names[koth_queue[i]]);
-	}
+	cvarManager->log("statTickerEvent() Next in queue: " + players_Q.front());
 	cvarManager->log("statTickerEvent() _______________________________________________________");
 	change_teams = true;
 }
@@ -385,21 +350,22 @@ void koth::RenderList(CanvasWrapper canvas)
 	canvas.SetColor(0, 255, 0, 255);
 	canvas.DrawString("__________________", 2, 1);
 
-	if (koth_queue[0] == -1)
+	if (players_Q.size() == 0)
 	{
 		canvas.SetPosition(Vector2{ 100, 330 });
 		canvas.SetColor(0, 100, 255, 255);
 		canvas.DrawString("No players in the queue.", 2, 2);
 	}
 	else {
-		for (int i = 0; i < koth_max_players; i++)
+		std::queue<int> temp_q = players_Q;
+		int size = temp_q.size();
+		for (int i = 0; i < size; i++)
 		{
-			if (koth_queue[i] == -1)
-				break;
 			canvas.SetPosition(Vector2{ 100, 330 + i * 30 });
 			canvas.SetColor(0, 100, 255, 255);
-			text = ((i == 0) ? std::to_string(i + 1) : "Next up") + ": " + koth_player_names[koth_queue[i]];
+			text = ((i == 0) ? std::to_string(i + 1) : "Next up") + ": " + koth_player_names[temp_q.front()];
 			canvas.DrawString(text, 2, 2);
+			temp_q.pop();
 		}
 	}
 }

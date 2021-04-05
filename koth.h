@@ -2,6 +2,7 @@
 
 #include "bakkesmod/plugin/bakkesmodplugin.h"
 #include "bakkesmod/plugin/pluginwindow.h"
+#include <queue>
 
 #include "version.h"
 constexpr auto plugin_version = stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD);
@@ -23,7 +24,7 @@ public:
 	int koth_players[koth_max_players];
 	std::string koth_player_names[koth_max_players];
 	int koth_playing[2];
-	int koth_queue[koth_max_players];
+	std::queue<int> players_Q;
 	bool change_teams = true;
 
 	//Boilerplate
@@ -36,7 +37,6 @@ public:
 	void resetPlayers();
 	void randomizePlayers();
 	void randomizeAllPlayers();
-	void MoveQueueBack();
 	void insertInQueue(int);
 	void ChangeTeamByID(int, int);
 	void startGame();
